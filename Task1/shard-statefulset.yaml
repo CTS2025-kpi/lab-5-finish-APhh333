@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: shard-node
+spec:
+  serviceName: "shard-service"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shard-node
+  template:
+    metadata:
+      labels:
+        app: shard-node
+    spec:
+      containers:
+      - name: shard-container
+        image: your-shard-image:latest
+        ports:
+        - containerPort: 5000
+        # === ВАЖЛИВА ЧАСТИНА ДЛЯ AUTOSCALING ===
+        resources:
+          requests:
+            cpu: "100m"  # HPA базуватиметься на цьому (100m = 0.1 ядра)
+            memory: "128Mi"
+          limits:
+            cpu: "500m"  # Не більше 0.5 ядра
+            memory: "512Mi"
