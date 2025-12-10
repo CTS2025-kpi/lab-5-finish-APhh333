@@ -1,0 +1,76 @@
+# --- Частина 1: Сервіс (Мережа) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shard-service
+  labels:
+    app: shard-node
+spec:
+  ports:
+  - port: 80        # Порт, на який звертаються інші
+    targetPort: 8000 # Порт, на якому працює Фаст апі
+    name: web
+  clusterIP: None   # Важливо! Це робить сервіс "Headless".
+                    # Це дозволяє звертатися до конкретного шарда: shard-0.shard-service
+  selector:
+    app: shard-node
+
+---
+# --- Частина 2: Самі Шарди (Аналог docker-compose service) ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: shard-node
+spec:
+  serviceName: "shard-service"
+  replicas: 2       # Початкова кількість шардів (як scale=2)
+  selector:
+    matchLabels:
+      app: shard-node
+  template:
+    metadata:
+      labels:
+        app: shard-node
+    spec:
+      containers:
+      - name: shard-app
+        image: shard-image:v1  # <-- Образу шарду
+        imagePullPolicy: IfNotPresent # Важливо! Щоб K8s не ліз в інтернет, а брав локальний образ
+        ports:
+        - containerPort: 8000
+
+        # === ОБОВ'ЯЗКОВО ДЛЯ AUTOSCALING ===
+        resources:
+          requests:
+            cpu: "100m"    # K8s резервує 0.1 ядра процесора
+            memory: "128Mi"
+          limits:
+            cpu: "500m"    # Шард не може з'їсти більше 0.5 ядра
+            memory: "512Mi"
+
+        # === ЗМІННІ ОТОЧЕННЯ (ENV) ===
+        # Перенесіть сюди environment з вашого docker-compose
+        env:
+          # 1. Передаємо ім'я пода як SHARD_NAME (щоб не було None)
+          - name: SHARD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+          # 2. Група теж буде ім'ям пода (для лаби це ОК)
+          - name: SHARD_GROUP
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+          # 3. Правильна адреса Координатора всередині кластера
+          # (Не localhost, а ім'я сервісу!)
+          - name: COORDINATOR_URL
+            value: "http://coordinator-service:8080"
+
+          - name: SHARD_PORT
+            value: "8000"
+
+          # Вимикаємо зайві логи Datadog, щоб не смітили
+          - name: DD_TRACE_ENABLED
+            value: "false"

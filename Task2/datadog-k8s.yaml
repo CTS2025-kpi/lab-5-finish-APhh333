@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: datadog  # Важливо: Python-код за замовчуванням шукає хост "datadog"
+spec:
+  selector:
+    app: datadog-agent
+  ports:
+    - port: 8125
+      name: dogstatsd
+      protocol: UDP
+    - port: 8126
+      name: trace
+      protocol: TCP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datadog-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datadog-agent
+  template:
+    metadata:
+      labels:
+        app: datadog-agent
+    spec:
+      containers:
+      - name: agent
+        image: gcr.io/datadoghq/agent:7
+        ports:
+        - containerPort: 8125
+          protocol: UDP
+        - containerPort: 8126
+          protocol: TCP
+        env:
+        - name: DD_API_KEY
+          value: "5c20c10b4e76e15fbaad287dc6785fe1"
+
+        # Налаштування для роботи в K8s
+        - name: DD_SITE
+          value: "datadoghq.com" # або "datadoghq.eu", якщо європейський акаунт
+        - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
+          value: "true" # Дозволити приймати метрики з інших подів
+        - name: DD_APM_ENABLED
+          value: "true" # Увімкнути трейси
+        - name: DD_APM_NON_LOCAL_TRAFFIC
+          value: "true"
+        # Вимикаємо перевірку сертифікатів Kubelet (для Docker Desktop)
+        - name: DD_KUBELET_TLS_VERIFY
+          value: "false"
